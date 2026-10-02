@@ -6,9 +6,6 @@ Pilot your golden ship through deep space, collect falling stars, dodge hostile 
 
 ![Love2D](https://img.shields.io/badge/Love2D-11.4+-purple) ![Language](https://img.shields.io/badge/Language-Lua-blue)
 
-> **Tip:** Run the game (`love .`), take a screenshot, save it as `screenshot.png` in the repo root, then add this line under the description in the README:
-> `![Starlight Rescue gameplay](screenshot.png)`
-
 ## Features
 
 - Smooth 8-directional movement + gamepad support
@@ -84,7 +81,3 @@ Starlight-Rescue/
 ## License
 
 MIT — feel free to fork, remix, and share.
-
----
-
-Made with ❤️ and LÖVE.
