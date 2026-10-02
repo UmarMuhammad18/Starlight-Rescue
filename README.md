@@ -4,6 +4,8 @@ A fast, polished arcade game made with **LÖVE (Love2D)**.
 
 Pilot your golden ship through deep space, collect falling stars, dodge hostile drones, grab power-ups, and chase high scores.
 
+![Starlight Rescue gameplay](screenshot.png)
+
 ![Love2D](https://img.shields.io/badge/Love2D-11.4+-purple) ![Language](https://img.shields.io/badge/Language-Lua-blue)
 
 ## Features
@@ -60,6 +62,7 @@ Starlight-Rescue/
 ├── enemy.lua         # Chasing drones
 ├── star.lua          # Collectibles & power-ups
 ├── game.lua          # Core loop, states, scoring
+├── screenshot.png    # Gameplay preview
 └── README.md
 ```
 
