@@ -1,194 +1,265 @@
 -- Starlight Rescue: A "Collect the Stars" Game
 
+local config   = require("src.config")
+local fonts    = require("src.fonts")
+local input    = require("src.input")
+local audio    = require("src.audio")
+local save     = require("src.save")
+local effects  = require("src.effects")
+local Player   = require("src.player")
+local Enemies  = require("src.enemies")
+local Stars    = require("src.stars")
+local Powerups = require("src.powerups")
+local ui       = require("src.ui")
+
+local game = {
+    state = "menu",  -- "menu", "playing", "paused" or "gameover"
+    clock = 0,       -- always ticking; drives animations
+}
+
+local function resetGame()
+    game.score = 0
+    game.lives = config.startLives
+    game.combo = { streak = 0, timer = 0, multiplier = 1 }
+    game.newHighScore = false
+    game.player = Player.new()
+    game.enemies = Enemies.new(game.player)
+    game.stars = Stars.new()
+    game.powerups = Powerups.new()
+    effects.clear()
+    ui.reset()
+end
+
+local function startGame()
+    resetGame()
+    game.state = "playing"
+    audio.setMusicQuiet(false)
+    audio.play("start")
+end
+
+local function gameOver()
+    game.state = "gameover"
+    if game.score > game.highScore then
+        game.highScore = game.score
+        game.newHighScore = true
+        save.saveHighScore(game.score)
+    end
+    local p = game.player
+    effects.setTrail(p.x, p.y, false, false)
+    effects.burst(p.x, p.y, {1, 0.8, 0.2}, 80, 320)
+    effects.shake(0.5)
+    audio.play("gameover")
+    audio.setMusicQuiet(true)
+end
+
+local function addScore(points)
+    game.score = game.score + points
+    ui.bumpScore()
+end
+
+local function breakCombo()
+    game.combo.streak = 0
+    game.combo.timer = 0
+    game.combo.multiplier = 1
+end
+
+-- A shield absorbs the hit; otherwise lose a life
+local function hurtPlayer()
+    local p = game.player
+    if p.shield > 0 then
+        p.shield = 0
+        p.invuln = 0.6
+        effects.burst(p.x, p.y, {0.4, 0.85, 1}, 40, 260)
+        effects.popup("SHIELD!", p.x, p.y - 40, {0.4, 0.85, 1})
+        effects.shake(0.15)
+        audio.play("shield")
+        return
+    end
+
+    game.lives = game.lives - 1
+    p.invuln = config.invulnTime
+    breakCombo()
+    effects.burst(p.x, p.y, {1, 0.3, 0.3}, 40, 260)
+    effects.shake(0.3)
+    audio.play("hit")
+    if game.lives <= 0 then gameOver() end
+end
+
+local function collectStar(star)
+    local kind = star.kind
+    if kind.bad then
+        effects.burst(star.x, star.y, kind.color, 25, 200)
+        hurtPlayer()
+        return
+    end
+
+    local combo = game.combo
+    combo.streak = combo.streak + 1
+    combo.timer = config.combo.window
+    local multiplier = math.min(config.combo.maxMultiplier,
+        1 + math.floor(combo.streak / config.combo.starsPerLevel))
+    if multiplier > combo.multiplier then
+        effects.popup("COMBO x" .. multiplier, config.width / 2, 140, {1, 0.6, 0.2}, true)
+        audio.play("combo")
+    end
+    combo.multiplier = multiplier
+
+    effects.burst(star.x, star.y, kind.color, 18, 180)
+
+    if kind.life and game.lives < config.maxLives then
+        game.lives = game.lives + 1
+        effects.popup("+1 LIFE", star.x, star.y, kind.color)
+        audio.play("life")
+    else
+        -- A life star at full lives is worth a small bonus instead
+        local points = (kind.points or 25) * multiplier
+        addScore(points)
+        effects.popup("+" .. points, star.x, star.y, kind.color)
+        audio.play(kind.name == "gold" and "gold" or "collect")
+    end
+end
+
+local function applyPowerup(item)
+    local kind = item.kind
+    game.player[kind.name] = Powerups.durationFor(kind)
+    effects.burst(item.x, item.y, kind.color, 30, 220)
+    effects.popup(kind.label, item.x, item.y - 20, kind.color, true)
+    audio.play("powerup")
+end
+
+local function updatePlaying(dt)
+    local p = game.player
+    local moveX, moveY = input.getMovement()
+    Player.update(p, dt, moveX, moveY)
+    effects.setTrail(p.x, p.y, p.moving, p.boost > 0)
+
+    if Enemies.update(game.enemies, dt, p, game.score) then
+        effects.popup("DRONE INCOMING!", config.width / 2, 180, {1, 0.3, 0.3}, true)
+        audio.play("drone")
+    end
+
+    if p.invuln <= 0 then
+        local drone = Enemies.checkHit(game.enemies, p)
+        if drone then
+            hurtPlayer()
+            Enemies.warpAway(drone, p)
+            if game.state ~= "playing" then return end
+        end
+    end
+
+    for _, star in ipairs(Stars.update(game.stars, dt, p, game.score, game.lives)) do
+        collectStar(star)
+        if game.state ~= "playing" then return end
+    end
+
+    local item = Powerups.update(game.powerups, dt, p)
+    if item then applyPowerup(item) end
+
+    local combo = game.combo
+    if combo.timer > 0 then
+        combo.timer = combo.timer - dt
+        if combo.timer <= 0 then breakCombo() end
+    end
+end
+
+local function setPaused(paused)
+    game.state = paused and "paused" or "playing"
+    audio.setMusicQuiet(paused)
+    audio.play("pause")
+end
+
+local function goToMenu()
+    game.state = "menu"
+    audio.setMusicQuiet(false)
+end
+
+local function handleAction(action)
+    if action == "mute" then
+        audio.toggleMute()
+        return
+    end
+
+    local state = game.state
+    if state == "menu" then
+        if action == "confirm" or action == "pause" then startGame()
+        elseif action == "escape" or action == "back" then love.event.quit() end
+    elseif state == "playing" then
+        if action == "pause" or action == "escape" then setPaused(true) end
+    elseif state == "paused" then
+        if action == "pause" or action == "escape" or action == "confirm" then setPaused(false)
+        elseif action == "restart" then startGame()
+        elseif action == "back" then goToMenu() end
+    elseif state == "gameover" then
+        if action == "confirm" or action == "restart" or action == "pause" then startGame()
+        elseif action == "escape" or action == "back" then goToMenu() end
+    end
+end
+
 function love.load()
-    -- Set up the game window
-    love.window.setTitle("Starlight Rescue")
-    love.window.setMode(800, 600)
-    
-    -- Player (The spaceship)
-    player = {
-        x = 400, y = 550,
-        width = 40, height = 40,
-        speed = 300,
-        radius = 20
-    }
-    
-    -- Collectibles (The stars)
-    collectibles = {}
-    spawnTimer = 0
-    spawnDelay = 1
-    
-    -- Enemy (The drone)
-    enemy = {
-        x = 400, y = 50,
-        width = 35, height = 35,
-        speed = 150,
-        radius = 17.5
-    }
-    
-    -- Game state
-    score = 0
-    lives = 3
-    font = love.graphics.newFont(30)
-    gameActive = true
-    screenShake = 0
+    love.graphics.setBackgroundColor(0.05, 0.05, 0.15)
+    fonts.load()
+    effects.load()
+    audio.load()
+    game.highScore = save.loadHighScore()
+    resetGame()
+    audio.playMusic()
 end
 
 function love.update(dt)
-    if not gameActive then return end
-    
-    -- 1. Player Movement (Arrow Keys or WASD)
-    local move = {x = 0, y = 0}
-    if love.keyboard.isDown("left", "a") then move.x = -1 end
-    if love.keyboard.isDown("right", "d") then move.x = 1 end
-    if love.keyboard.isDown("up", "w") then move.y = -1 end
-    if love.keyboard.isDown("down", "s") then move.y = 1 end
-    
-    if move.x ~= 0 or move.y ~= 0 then
-        local length = math.sqrt(move.x^2 + move.y^2)
-        move.x = move.x / length
-        move.y = move.y / length
-    end
-    
-    player.x = player.x + move.x * player.speed * dt
-    player.y = player.y + move.y * player.speed * dt
-    
-    -- Keep player inside the screen
-    player.x = math.max(player.radius, math.min(800 - player.radius, player.x))
-    player.y = math.max(player.radius, math.min(600 - player.radius, player.y))
-    
-    -- 2. Enemy Movement (Chases the player)
-    local dx = player.x - enemy.x
-    local dy = player.y - enemy.y
-    local dist = math.sqrt(dx^2 + dy^2)
-    if dist > 0 then
-        enemy.x = enemy.x + (dx / dist) * enemy.speed * dt
-        enemy.y = enemy.y + (dy / dist) * enemy.speed * dt
-    end
-    
-    -- Keep enemy inside the screen
-    enemy.x = math.max(enemy.radius, math.min(800 - enemy.radius, enemy.x))
-    enemy.y = math.max(enemy.radius, math.min(600 - enemy.radius, enemy.y))
-    
-    -- 3. Enemy vs. Player Collision
-    local dxp = player.x - enemy.x
-    local dyp = player.y - enemy.y
-    local distance = math.sqrt(dxp^2 + dyp^2)
-    if distance < player.radius + enemy.radius then
-        lives = lives - 1
-        screenShake = 0.3
-        
-        if lives <= 0 then
-            gameActive = false
-        else
-            -- Respawn player at center, enemy at a safe corner
-            player.x, player.y = 400, 550
-            enemy.x, enemy.y = 50, 50
-        end
-    end
-    
-    -- 4. Spawn Stars
-    spawnTimer = spawnTimer + dt
-    if spawnTimer >= spawnDelay then
-        spawnTimer = 0
-        local star = {
-            x = math.random(20, 780),
-            y = -20,
-            radius = 10,
-            speed = math.random(100, 250)
-        }
-        table.insert(collectibles, star)
-    end
-    
-    -- 5. Update Stars & Check Collection
-    for i, star in ipairs(collectibles) do
-        star.y = star.y + star.speed * dt
-        
-        -- Check if player collects the star
-        local dxc = player.x - star.x
-        local dyc = player.y - star.y
-        if math.sqrt(dxc^2 + dyc^2) < player.radius + star.radius then
-            table.remove(collectibles, i)
-            score = score + 10
-            spawnDelay = math.max(0.3, spawnDelay - 0.005)
-        end
-    end
-    
-    -- Remove stars that fall off-screen
-    for i = #collectibles, 1, -1 do
-        if collectibles[i].y > 600 + collectibles[i].radius then
-            table.remove(collectibles, i)
-        end
-    end
-    
-    -- Screen shake effect (reduces over time)
-    if screenShake > 0 then
-        screenShake = screenShake - dt * 2
-    end
+    -- Avoid huge jumps after the window is dragged or the game hitches
+    dt = math.min(dt, 1 / 30)
+    game.clock = game.clock + dt
+    if game.state == "paused" then return end
+
+    local boosting = game.state == "playing" and game.player.boost > 0
+    effects.updateBackground(dt, boosting and 2 or 1)
+    if game.state == "playing" then updatePlaying(dt) end
+    effects.update(dt)
+    ui.update(dt, game)
+end
+
+local function drawWorld()
+    Powerups.draw(game.powerups)
+    Stars.draw(game.stars, game.clock)
+    effects.drawTrail()
+    Enemies.draw(game.enemies, game.player)
+    if game.state ~= "gameover" then Player.draw(game.player, game.clock) end
+    effects.drawBursts()
+    effects.drawPopups()
 end
 
 function love.draw()
-    -- Apply screen shake offset
-    local shakeX = 0
-    local shakeY = 0
-    if screenShake > 0 then
-        shakeX = love.math.random(-5, 5)
-        shakeY = love.math.random(-5, 5)
+    effects.drawBackground()
+
+    if game.state == "menu" then
+        ui.drawMenu(game)
+    else
+        local shakeX, shakeY = 0, 0
+        if game.state ~= "paused" then shakeX, shakeY = effects.getShakeOffset() end
+        love.graphics.push()
+        love.graphics.translate(shakeX, shakeY)
+        drawWorld()
+        love.graphics.pop()
+
+        ui.drawHUD(game)
+        if game.state == "paused" then ui.drawPause()
+        elseif game.state == "gameover" then ui.drawGameOver(game) end
     end
-    love.graphics.translate(shakeX, shakeY)
-    
-    -- Draw background
-    love.graphics.setBackgroundColor(0.05, 0.05, 0.15)
-    
-    -- Draw player (A golden ship)
-    love.graphics.setColor(1, 0.8, 0.2)
-    love.graphics.circle("fill", player.x, player.y, player.radius)
-    love.graphics.setColor(1, 1, 0.5)
-    love.graphics.circle("line", player.x, player.y, player.radius + 3)
-    
-    -- Draw enemy (A red drone)
-    love.graphics.setColor(1, 0.2, 0.2)
-    love.graphics.rectangle("fill", enemy.x - enemy.width/2, enemy.y - enemy.height/2, enemy.width, enemy.height, 5, 5)
-    love.graphics.setColor(1, 0.5, 0.5)
-    love.graphics.rectangle("line", enemy.x - enemy.width/2, enemy.y - enemy.height/2, enemy.width, enemy.height, 5, 5)
-    
-    -- Draw stars (Collectibles)
-    for _, star in ipairs(collectibles) do
-        love.graphics.setColor(0.2, 0.8, 1)
-        love.graphics.circle("fill", star.x, star.y, star.radius)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.circle("line", star.x, star.y, star.radius + 2)
-    end
-    
-    -- Draw UI
-    love.graphics.setFont(font)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Score: " .. score, 20, 20)
-    love.graphics.print("Lives: " .. lives, 20, 60)
-    
-    -- Game Over screen
-    if not gameActive then
-        love.graphics.setColor(0, 0, 0, 0.8)
-        love.graphics.rectangle("fill", 0, 0, 800, 600)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.printf("GAME OVER!\nFinal Score: " .. score, 0, 250, 800, "center")
-        love.graphics.printf("Press 'R' to Restart", 0, 350, 800, "center")
-    end
-    
-    love.graphics.reset()
+
+    ui.drawMuted()
 end
 
 function love.keypressed(key)
-    if key == "r" and not gameActive then
-        -- Reset the game
-        gameActive = true
-        score = 0
-        lives = 3
-        collectibles = {}
-        spawnDelay = 1
-        spawnTimer = 0
-        player.x, player.y = 400, 550
-        enemy.x, enemy.y = 50, 50
-        screenShake = 0
-    end
+    local action = input.actionForKey(key)
+    if action then handleAction(action) end
+end
+
+function love.gamepadpressed(_, button)
+    local action = input.actionForButton(button)
+    if action then handleAction(action) end
+end
+
+-- Pause automatically when the window loses focus
+function love.focus(focused)
+    if not focused and game.state == "playing" then setPaused(true) end
 end
