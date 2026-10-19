@@ -2,6 +2,8 @@
 
 A small arcade game made with [LÖVE](https://love2d.org/) 11.5: fly your ship around, collect falling stars and dodge the drones hunting you.
 
+![Love2D](https://img.shields.io/badge/Love2D-11.5-purple) ![Language](https://img.shields.io/badge/Language-Lua-blue)
+
 ## Running
 
 Install LÖVE 11.5, then from this folder run:
@@ -64,3 +66,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
 This creates `dist/StarlightRescue.love` (runs anywhere LÖVE is installed) and `dist/StarlightRescue-win/`, a standalone Windows folder you can zip and share. Pass `-LovePath` if LÖVE isn't installed in `C:\Program Files\LOVE`.
+
+## License
+
+MIT — feel free to fork, remix, and share.
