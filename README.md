@@ -1,82 +1,71 @@
 # Starlight Rescue
 
-A fast, polished arcade game made with **LÖVE (Love2D)**.
+A small arcade game made with [LÖVE](https://love2d.org/) 11.5: fly your ship around, collect falling stars and dodge the drones hunting you.
 
-Pilot your golden ship through deep space, collect falling stars, dodge hostile drones, grab power-ups, and chase high scores.
+![Love2D](https://img.shields.io/badge/Love2D-11.5-purple) ![Language](https://img.shields.io/badge/Language-Lua-blue)
 
-![Love2D](https://img.shields.io/badge/Love2D-11.4+-purple) ![Language](https://img.shields.io/badge/Language-Lua-blue)
+## Running
 
-## Features
+Install LÖVE 11.5, then from this folder run:
 
-- Smooth 8-directional movement + gamepad support
-- Chasing enemies that scale with score
-- Falling stars + special **power-ups**:
-  - **Shield** – absorb one hit
-  - **Time Slow** – slow all enemies
-  - **Magnet** – pull stars toward you
-  - **2× Multiplier** – double score for a while
-  - **Extra Life**
-- Combo system that rewards rapid collecting
-- Particle effects, screen shake, player trail & invulnerability frames
-- Parallax starfield background
-- Persistent high score
-- Title screen, pause, and game-over states
-- Clean modular codebase
-
-## How to Run
-
-1. Install [LÖVE](https://love2d.org/) (11.4 or newer recommended).
-2. Clone or download this repository.
-3. Drag the folder onto the Love2D executable, **or** run from terminal:
-
-```bash
+```
 love .
 ```
 
-(or `love /path/to/Starlight-Rescue`)
+On Windows you can also drag the project folder onto `love.exe`.
 
 ## Controls
 
-| Action          | Keys / Input              |
-|-----------------|---------------------------|
-| Move            | WASD or Arrow Keys        |
-| Move (gamepad)  | Left stick                |
-| Pause           | P or Escape               |
-| Start           | Space or Enter             |
-| Restart         | R or Space (on game over) |
-| Title screen    | Escape (from game over)   |
+| Action        | Keyboard            | Gamepad      |
+|---------------|---------------------|--------------|
+| Move          | Arrow keys / WASD   | Left stick / D-pad |
+| Start / Retry | Enter / Space / R   | A / Start    |
+| Pause         | P / Esc             | Start        |
+| Back to menu  | Q (paused), Esc (game over) | Back  |
+| Mute          | M                   | Y            |
+| Quit          | Esc (title screen)  | Back (title screen) |
 
-## Project Structure
+The game also pauses itself when the window loses focus.
+
+## How to play
+
+- **Blue stars**: 10 points. **Gold stars**: 50 points. **Green stars**: an extra life (up to 5).
+- **Red spiky stars** appear after 50 points. Touching one costs a life.
+- Collect stars quickly in a row to build a **combo** multiplier (up to ×5).
+- **Drones** chase you. They get faster as your score rises, and another drone joins every 250 points (up to 4).
+- After a hit you blink and are invulnerable for a moment.
+- **Power-ups** appear every so often:
+  - **Shield**: absorbs one hit.
+  - **Magnet**: pulls nearby stars toward you.
+  - **Boost**: makes your ship faster.
+- Your best score is saved between sessions.
+
+## Project layout
 
 ```
-Starlight-Rescue/
-├── main.lua          # Entry point
-├── conf.lua          # Window & module settings
-├── config.lua        # Balancing values & colors
-├── utils.lua         # Math helpers
-├── background.lua    # Parallax starfield
-├── particles.lua     # Simple particle system
-├── player.lua        # Player ship + power-up timers
-├── enemy.lua         # Chasing drones
-├── star.lua          # Collectibles & power-ups
-├── game.lua          # Core loop, states, scoring
-└── README.md
+main.lua          game states and the game loop
+conf.lua          window settings
+src/config.lua    every tuning value (speeds, spawn rates, durations)
+src/player.lua    the ship
+src/enemies.lua   chasing drones
+src/stars.lua     falling collectibles
+src/powerups.lua  shield / magnet / boost
+src/effects.lua   starfield, particles, popups, screen shake
+src/audio.lua     sound effects and music, generated in code
+src/ui.lua        HUD, title, pause and game-over screens
+src/input.lua     keyboard and gamepad mapping
+src/save.lua      high score file
 ```
 
-## Tips for High Scores
+To rebalance the game, edit `src/config.lua`.
 
-- Keep the combo alive — points scale with it.
-- Prioritize power-ups, especially Shield and Magnet.
-- Don’t get greedy near multiple drones.
-- Difficulty and enemy count rise with your score.
+## Building
 
-## Future Ideas
+```
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
 
-- Sound effects & music (drop `.ogg` files into an `assets/` folder and load them)
-- More enemy types (zig-zag, shooter)
-- Achievements / daily challenges
-- Mobile touch controls
-- Sprite art instead of procedural shapes
+This creates `dist/StarlightRescue.love` (runs anywhere LÖVE is installed) and `dist/StarlightRescue-win/`, a standalone Windows folder you can zip and share. Pass `-LovePath` if LÖVE isn't installed in `C:\Program Files\LOVE`.
 
 ## License
 
